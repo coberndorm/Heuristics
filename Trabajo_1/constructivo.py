@@ -77,7 +77,9 @@ def shortest_job(jobs, mach):
     
     if job_next.free_time != mach.free_time:
         # Synchronize the job's free time with the machine's free time
-        job_next.free_time = mach.free_time
+        time = max(job_next.free_time, mach.free_time)
+        job_next.free_time = time
+        mach.free_time = time
     
     processing_time = job_next.proc_time[job_next.counter]
 
@@ -126,4 +128,4 @@ def constructivo(jobs, machines):
         job_next.free_time += processing_time
         mach.free_time += processing_time
     
-    return ans
+    return max([x["End"] for x in ans]), machine_order
