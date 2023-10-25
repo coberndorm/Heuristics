@@ -1,4 +1,5 @@
 from auxiliar_functions import *
+import time
 
 def interchange(sol, i, j, mach):
     # move the value in position i to the position j in the machine mach
@@ -74,16 +75,17 @@ def best_improvement(constr, processing_time, machines_required, n, m, method = 
                     
     return sol
 
-def variable_neighborhood_search(constr, processing_time, machines_required, n, m, methods = [interchange, insert_forward, insert_backward]):
+def variable_neighborhood_search(constr, processing_time, machines_required, n, m, methods = [interchange, insert_forward, insert_backward], max_time = 60):
     sol = constr; sol_time = makespan(sol, processing_time, machines_required, n, m)
     stop = False
     sol_best = sol; sol_time_best = sol_time
+    start_time = time.time()
 
-    while stop == False:
+    while stop == False and time.time() - start_time < max_time:
         stop = True
         counter = 0
 
-        while counter < len(methods):
+        while counter < len(methods) and time.time() - start_time < max_time:
             for mach in range(m):
                 for i in range(n):
                     for j in range(i+1, n):
@@ -91,7 +93,7 @@ def variable_neighborhood_search(constr, processing_time, machines_required, n, 
                         new_sol = method(sol, i, j, mach)
 
                         if feasible(new_sol, machines_required, n, m) == False:
-                            if method[counter] in [interchange, insert_forward]:
+                            if counter <= len(methods) - 1:
                                 break
                             else:
                                 continue
@@ -170,3 +172,6 @@ def far_neighborhoods_seach(constr, processing_time, machines_required, n, m, me
             sol = sol_best; sol_time = sol_time_best
                     
     return sol
+
+def LNS_Multiple_initial_solutions_():
+    pass
