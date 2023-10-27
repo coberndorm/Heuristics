@@ -1,5 +1,8 @@
 from auxiliar_functions import *
 import time
+import random
+import copy
+
 
 def interchange(sol, i, j, mach):
     # move the value in position i to the position j in the machine mach
@@ -173,5 +176,159 @@ def far_neighborhoods_seach(constr, processing_time, machines_required, n, m, me
                     
     return sol
 
-def LNS_Multiple_initial_solutions_():
-    pass
+
+
+def recocido(sol, processing_time, machines_required, n, m, method = interchange, max_time = 10, max_iter= 100, T0 = 100, alpha = 0.9, T_min = 0.1):
+    
+    sol_time = makespan(sol, processing_time, machines_required, n, m)
+    stop = False
+
+    start_time = time.time()
+
+    while time.time() - start_time < max_time and stop == False:
+        stop = True
+        T = T0
+
+        while T > T_min:
+            for _ in range(max_iter):
+                
+                i = np.random.randint(0, n-1); j = np.random.randint(i+1, n); mach = np.random.randint(0, m)
+                if i == j:
+                    continue
+                new_sol = method(sol, i, j, mach)
+
+                if feasible(new_sol, machines_required, n, m) == False:
+                    continue
+                
+                new_sol_time = makespan(new_sol, processing_time, machines_required, n, m)
+
+                if new_sol_time < sol_time:
+                    stop = False
+                    sol = new_sol; sol_time = new_sol_time
+
+                else:
+                    r = random.random()
+                    if r < np.exp((sol_time - new_sol_time)/T):
+                        sol = new_sol; sol_time = new_sol_time
+                        stop = False
+
+            T = alpha * T
+        
+                    
+    return sol
+
+def simple_multi_search(multiple_sol, processing_time, machines_required, n, m, method = interchange, noise_selection_prob = 0.01):
+    best_sol = multiple_sol[0]; best_sol_time = makespan(best_sol, processing_time, machines_required, n, m)
+
+    for sol in multiple_sol:
+
+        sol_time = makespan(sol, processing_time, machines_required, n, m)
+        stop = False
+        sol_best = sol; sol_time_best = sol_time
+
+        while stop == False:
+            stop = True
+            for mach in range(m):
+                for i in range(n):
+                    for j in range(i+1, n):
+                        new_sol = method(sol, i, j, mach)
+                        if feasible(new_sol, machines_required, n, m) == False:
+                            continue
+                        new_sol_time = makespan(new_sol, processing_time, machines_required, n, m)
+                        if new_sol_time < sol_time_best:
+                            sol_best = new_sol; sol_time_best = new_sol_time
+                            stop = False
+
+            if stop == False or random.random() < noise_selection_prob:
+                sol = sol_best; sol_time = sol_time_best
+        
+        if sol_time < best_sol_time:
+            best_sol = sol; best_sol_time = sol_time
+                    
+    return best_sol
+
+def repair_method(destroyed_jobs, sol, machines_required, n, m, max_iter=100):
+
+    while True:
+
+        new_sol = copy.deepcopy(sol)
+
+        # Insert the shuffled values into the target list
+        for mach in destroyed_jobs.keys():
+            for job in destroyed_jobs[mach]:
+                index_to_insert = random.randint(0, len(new_sol[mach-1]))
+                new_sol[mach-1].insert(index_to_insert,job)
+
+        if feasible(new_sol, machines_required, n, m):
+            return new_sol
+        
+        if max_iter == 0:
+            return None
+        
+        max_iter -= 1
+
+def LNS(sol, n,m, machines_required, lns_destroy_percentage=0.1):
+    processes_num = {i * m + j +1: (i+1,machines_required[i][j])  for i in range(n) for j in range(m)}
+    job_size = n*m
+    sol_copy = copy.deepcopy(sol)
+    num_jobs_to_destroy = int(lns_destroy_percentage * job_size)
+    destroyed_indices = random.sample(range(1,job_size+1), num_jobs_to_destroy)
+
+    # Remove the jobs from the solution
+    destroyed_jobs = {i:[] for i in range(1,m+1)}
+    for index in destroyed_indices:
+        job, mach = processes_num[index]
+        destroyed_jobs[mach].append(job)
+        sol_copy[mach-1].pop(sol_copy[mach-1].index(job))
+
+    
+    # Apply a repair method to reconstruct the solution
+    repaired_sol = repair_method(destroyed_jobs, sol_copy, machines_required, n, m)
+
+    return repaired_sol
+
+def multi_search(multiple_sol, processing_time, machines_required, n, m, method = interchange, noise_prob = 0.01, lns_destroy_perc=0.1, max_time=10, max_iter=100):
+    
+    best_sol = multiple_sol[0]; best_sol_time = makespan(best_sol, processing_time, machines_required, n, m)
+
+    start_time = time.time()
+    
+    for sol in multiple_sol:
+        sol_time = makespan(sol, processing_time, machines_required, n, m)
+        stop = False
+        sol_best = sol; sol_time_best = sol_time
+
+        while stop == False and max_time > time.time() - start_time:
+            stop = True
+            for mach in range(m):
+                for i in range(n):
+                    for j in range(i+1, n):
+                        new_sol = method(sol, i, j, mach)
+                        if feasible(new_sol, machines_required, n, m) == False:
+                            continue
+                        new_sol_time = makespan(new_sol, processing_time, machines_required, n, m)
+                        if new_sol_time < sol_time_best:
+                            sol_best = new_sol; sol_time_best = new_sol_time
+                            stop = False
+
+            if stop == False or random.random() < noise_prob:
+                sol = sol_best; sol_time = sol_time_best
+        
+            if sol_time < best_sol_time:
+                best_sol = sol; best_sol_time = sol_time
+        
+    # Apply LNS
+    while time.time() - start_time <= max_time and max_iter > 0:
+        new_sol = LNS(best_sol, n,m, machines_required, lns_destroy_perc)
+        if new_sol == None:
+            continue
+
+        vns_new_sol = variable_neighborhood_search(new_sol, processing_time, machines_required, n, m, max_time=max_time)
+        new_sol_time = makespan(vns_new_sol, processing_time, machines_required, n, m)
+
+        if new_sol_time < best_sol_time:
+            best_sol = vns_new_sol; best_sol_time = new_sol_time
+
+        max_iter -= 1
+                    
+    return best_sol
